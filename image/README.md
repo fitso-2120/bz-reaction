@@ -1,0 +1,1 @@
+> This is a dummy file for recording a directory in the git-repository.
