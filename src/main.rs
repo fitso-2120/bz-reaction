@@ -57,7 +57,7 @@ fn main() {
     // 必要回数反応を繰り返す
     for t in 0..200 {
         // 各回の領域を画像(PNG)で出力するファイル名
-        let fname = format!("image/file-{:04}.png", t);
+        let fname = format!("images/file-{:04}.png", t);
         // 画像のバッファーを確保
         let mut imgbuf = image::ImageBuffer::new(a[0].len() as u32, a.len() as u32);
 
