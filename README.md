@@ -1,5 +1,42 @@
 # bz-reaction
 
+## Usage
+Add this to you `Cargo.toml`:
+```toml
+[dependencies]
+getopts = "0.2.21"
+image = "0.23.14"
+rand = "0.8.4"
+serde = { version = "1.0.132", features = ["derive"] }
+toml = "0.5.8"
+```
+
+Argument description...
+```bash
+cargo run --release -- -h
+```
+
+First, create a configuration file.<br/>
+Configuration file does not create automatically.
+
+```bash
+cargo run --release -- -h
+```
+
+Configuretion file is ...
+```toml
+height = 400 # image area's height
+width = 400  # image area's width
+alpha = 0.8  # Chemical species `A`'s relative velocity of reaction.
+beta = 1.0   # Chemical species `B`'s relative velocity of reaction.
+gamma = 1.0  # Chemical species `C`'s relative velocity of reaction.
+times = 200  # The number of times to simulate. Number of image files.
+file_prefix = "images/file-" # Image file prefix
+```
+
+Image file is in png format.<br/>
+You can combine multiple PNG files into one APNG file using tools such as `APNG Assembler`.
+
 In Japanese
 
 - 化学反応のなかで時計反応と呼ばれる周期的な反応のシミュレーションを行う。
@@ -21,3 +58,4 @@ In Japanese
 
 - 反応速度を３つの値で扱っている。<br/>シミュレーションとして無次元化するなら、３つの値の和を１とするか積を１とした正規化をするべきでは？
 - 領域全体を同期して更新している。<br/>化学反応がわざわざ同期しているとは考え難いので非同期にしたい。
+- エラー時のメッセージ出力があまりきれいではありません。もう少し、なんとかしたいが、知識が追いついていません

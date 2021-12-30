@@ -1,18 +1,36 @@
+extern crate getopts;
 extern crate rand;
+extern crate serde;
+extern crate toml;
+
+use getopts::Options;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
+use std::fs::{self, File};
+use std::io::Write;
+use std::env;
 
 // ベロウソフ・ジャボチンスキー(Belousov-Zhabotinsky, BZ)反応のシミュレーション
 // [Qiita BZ反応のシミュレーション](https://qiita.com/STInverSpinel/items/a7dcfbde0a08063f4d41)を参照
 // オリジナルはJuliaで書かれていたものをRustに変換
 
-// 領域の大きさ
-const H: usize = 400;
-const W: usize = 400;
+#[derive(Debug, Serialize, Deserialize)]
+struct Config {
+    // 領域の大きさ
+    height: usize,
+    width: usize,
 
-// 反応の強度
-const ALPHA: f64 = 0.5;
-const BETA: f64 = 1.0;
-const GAMMA: f64 = 1.0;
+    // 反応の強度
+    alpha: f64,
+    beta: f64,
+    gamma: f64,
+
+    // 繰返回数
+    times: u32,
+
+    // イメージファイルのプリフィックス
+    file_prefix: String,
+}
 
 // 確認用に作成。普段は使用しない
 #[allow(dead_code)]
@@ -43,11 +61,93 @@ fn mat_init(h: usize, w: usize) -> Vec<Vec<f64>> {
     return a;
 }
 
+fn print_usage(pgname: &String, opt:Options) {
+    let brief = format!("Usage: {} FILE [options]", pgname);
+    print!("{}", opt.usage(&brief));
+    print!(r#"\
+The configuration file has the same directory as this command, and the command name.toml is assumed. 
+
+To change the configuration file to use, use `-c` or` --config-file`.
+
+If there is no config file, `-g` or` --generate-config-file` will generate a config file template. 
+"#);
+}
+
+fn getenv() -> Option<String> {
+    let args: Vec<String> = env::args().collect();
+    let pgname = args[0].clone();
+
+    let mut opts = Options::new();
+    opts.optopt("c", "config-file", "change configuration-file", "NAME");
+    opts.optflag("g", "generate-config-file", "create template of settings-file");
+    opts.optflag("h", "help", "print this help menu");
+
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => { m }
+        Err(f) => { panic!("{}", f.to_string()) }
+    };
+
+    if matches.opt_present("h") {
+        print_usage(&pgname, opts);
+        return None;
+    }
+
+    // 設定ファイル名を確定
+    let config_file_opt = matches.opt_str("c");
+    // 拡張子に".toml"を無条件に追加
+    let config_file = if config_file_opt == None { pgname } else {config_file_opt.unwrap()} + ".toml";
+
+    // 設定ファイル書き出しか？
+    if matches.opt_present("g") {
+        // 設定ファイルを確定したファイル名で出力
+        let config = Config {
+            height: 400,
+            width: 400,
+            alpha: 0.8,
+            beta: 1.0,
+            gamma: 1.0,
+            times: 200,
+            file_prefix: "images/file-".to_string(),
+        };
+        let mut file = match File::create(config_file) {
+            Ok(it) => it,
+            Err(err) => panic!("{}", err),
+        };
+        match write!(file, "{}", toml::to_string(&config).unwrap()) {
+            Ok(it) => it,
+            Err(err) => panic!("{}", err),
+        };
+        match file.flush() {
+            Ok(it) => it,
+            Err(err) => panic!("{}", err),
+        }
+        return None;
+    }
+
+    return Some(config_file);
+}
+
 fn main() {
+    let config_file_opt = getenv();
+    if config_file_opt == None {
+        return;
+    }
+    let config_file = config_file_opt.unwrap();
+    // Read file and parse to Setting
+    if !std::path::Path::new(&config_file).exists() {
+            print!("config-file '{}' is not found\n", config_file);
+            return;
+    };
+    let config_str: String = match fs::read_to_string(config_file) {
+        Ok(it) => it,
+        Err(err) => panic!("{}", err),
+    };
+    let config:Config = toml::from_str(&config_str).unwrap();
+
     // 領域に３つの化学種を用意
-    let mut a = mat_init(H, W);
-    let mut b = mat_init(H, W);
-    let mut c = mat_init(H, W);
+    let mut a = mat_init(config.height, config.width);
+    let mut b = mat_init(config.height, config.width);
+    let mut c = mat_init(config.height, config.width);
 
     // 各々の化学種の濃度を[0..1]の範囲で乱数で配置
     rand_area(&mut a);
@@ -55,9 +155,9 @@ fn main() {
     rand_area(&mut c);
 
     // 必要回数反応を繰り返す
-    for t in 0..200 {
+    for t in 0..config.times {
         // 各回の領域を画像(PNG)で出力するファイル名
-        let fname = format!("images/file-{:04}.png", t);
+        let fname = format!("{}{:04}.png", config.file_prefix, t);
         // 画像のバッファーを確保
         let mut imgbuf = image::ImageBuffer::new(a[0].len() as u32, a.len() as u32);
 
@@ -107,9 +207,9 @@ fn main() {
                 //print!("step {:04}, ({:03},{:03}) ca) = {:.1}, cb = {:.1}, cc = {:.1}\n", t, x, y, ca, cb, cc);
 
                 // 次の世代での濃度を計算
-                a[x as usize][y as usize] = ca * (1.0 + (ALPHA * cb - GAMMA * cc));
-                b[x as usize][y as usize] = cb * (1.0 + (BETA * cc - ALPHA * ca));
-                c[x as usize][y as usize] = cc * (1.0 + (GAMMA * ca - BETA * cb));
+                a[x as usize][y as usize] = ca * (1.0 + (config.alpha * cb - config.gamma * cc));
+                b[x as usize][y as usize] = cb * (1.0 + (config.beta * cc - config.alpha * ca));
+                c[x as usize][y as usize] = cc * (1.0 + (config.gamma * ca - config.beta * cb));
             }
         }
 
