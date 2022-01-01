@@ -6,9 +6,9 @@ extern crate toml;
 use getopts::Options;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs::{self, File};
 use std::io::Write;
-use std::env;
 
 // ベロウソフ・ジャボチンスキー(Belousov-Zhabotinsky, BZ)反応のシミュレーション
 // [Qiita BZ反応のシミュレーション](https://qiita.com/STInverSpinel/items/a7dcfbde0a08063f4d41)を参照
@@ -61,16 +61,18 @@ fn mat_init(h: usize, w: usize) -> Vec<Vec<f64>> {
     return a;
 }
 
-fn print_usage(pgname: &String, opt:Options) {
+fn print_usage(pgname: &String, opt: Options) {
     let brief = format!("Usage: {} FILE [options]", pgname);
     print!("{}", opt.usage(&brief));
-    print!(r#"\
+    print!(
+        r#"\
 The configuration file has the same directory as this command, and the command name.toml is assumed. 
 
 To change the configuration file to use, use `-c` or` --config-file`.
 
 If there is no config file, `-g` or` --generate-config-file` will generate a config file template. 
-"#);
+"#
+    );
 }
 
 fn getenv() -> Option<String> {
@@ -79,12 +81,18 @@ fn getenv() -> Option<String> {
 
     let mut opts = Options::new();
     opts.optopt("c", "config-file", "change configuration-file", "NAME");
-    opts.optflag("g", "generate-config-file", "create template of settings-file");
+    opts.optflag(
+        "g",
+        "generate-config-file",
+        "create template of settings-file",
+    );
     opts.optflag("h", "help", "print this help menu");
 
     let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m }
-        Err(f) => { panic!("{}", f.to_string()) }
+        Ok(m) => m,
+        Err(f) => {
+            panic!("{}", f.to_string())
+        }
     };
 
     if matches.opt_present("h") {
@@ -95,7 +103,11 @@ fn getenv() -> Option<String> {
     // 設定ファイル名を確定
     let config_file_opt = matches.opt_str("c");
     // 拡張子に".toml"を無条件に追加
-    let config_file = if config_file_opt == None { pgname } else {config_file_opt.unwrap()} + ".toml";
+    let config_file = if config_file_opt == None {
+        pgname
+    } else {
+        config_file_opt.unwrap()
+    } + ".toml";
 
     // 設定ファイル書き出しか？
     if matches.opt_present("g") {
@@ -135,14 +147,14 @@ fn main() {
     let config_file = config_file_opt.unwrap();
     // Read file and parse to Setting
     if !std::path::Path::new(&config_file).exists() {
-            print!("config-file '{}' is not found\n", config_file);
-            return;
+        print!("config-file '{}' is not found\n", config_file);
+        return;
     };
     let config_str: String = match fs::read_to_string(config_file) {
         Ok(it) => it,
         Err(err) => panic!("{}", err),
     };
-    let config:Config = toml::from_str(&config_str).unwrap();
+    let config: Config = toml::from_str(&config_str).unwrap();
 
     // 領域に３つの化学種を用意
     let mut a = mat_init(config.height, config.width);
