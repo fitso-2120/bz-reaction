@@ -139,25 +139,24 @@ fn getenv() -> Option<String> {
     return Some(config_file);
 }
 
-fn image_write(config: &Config, t:u32, a:&Vec<Vec<f64>>, b:&Vec<Vec<f64>>, c:&Vec<Vec<f64>>) {
-        // 各回の領域を画像(PNG)で出力するファイル名
-        let fname = format!("{}{:04}.png", config.file_prefix, t);
-        // 画像のバッファーを確保
-        let mut imgbuf = image::ImageBuffer::new(a[0].len() as u32, a.len() as u32);
+fn image_write(config: &Config, t: u32, a: &Vec<Vec<f64>>, b: &Vec<Vec<f64>>, c: &Vec<Vec<f64>>) {
+    // 各回の領域を画像(PNG)で出力するファイル名
+    let fname = format!("{}{:04}.png", config.file_prefix, t);
+    // 画像のバッファーを確保
+    let mut imgbuf = image::ImageBuffer::new(a[0].len() as u32, a.len() as u32);
 
-        // 領域内の各セル（反応の最小単位領域）で各化学種の濃度を色にする
-        // 各化学種とも大きさは同じなので代表でaのサイズでループを形成
-        for x in 0..a.len() {
-            for y in 0..a[x].len() {
-                let r: u8 = (a[x][y] * 256.0) as u8;
-                let g: u8 = (b[x][y] * 256.0) as u8;
-                let b: u8 = (c[x][y] * 256.0) as u8;
-                let pixel = imgbuf.get_pixel_mut(x.try_into().unwrap(), y.try_into().unwrap());
-                *pixel = image::Rgb([r, g, b]);
-            }
+    // 領域内の各セル（反応の最小単位領域）で各化学種の濃度を色にする
+    // 各化学種とも大きさは同じなので代表でaのサイズでループを形成
+    for x in 0..a.len() {
+        for y in 0..a[x].len() {
+            let r: u8 = (a[x][y] * 256.0) as u8;
+            let g: u8 = (b[x][y] * 256.0) as u8;
+            let b: u8 = (c[x][y] * 256.0) as u8;
+            let pixel = imgbuf.get_pixel_mut(x.try_into().unwrap(), y.try_into().unwrap());
+            *pixel = image::Rgb([r, g, b]);
         }
-        imgbuf.save(fname).unwrap();
-
+    }
+    imgbuf.save(fname).unwrap();
 }
 
 fn main() {
