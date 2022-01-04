@@ -4,6 +4,7 @@ extern crate serde;
 extern crate toml;
 
 use getopts::Options;
+use image::{ImageBuffer, Rgb};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -66,10 +67,8 @@ fn print_usage(pgname: &String, opt: Options) {
     print!("{}", opt.usage(&brief));
     print!(
         r#"\
-The configuration file has the same directory as this command, and the command name.toml is assumed. 
-
-To change the configuration file to use, use `-c` or` --config-file`.
-
+The configuration file has the same directory as this command, and the command name.toml is assumed.\n
+To change the configuration file to use, use `-c` or` --config-file`.\n
 If there is no config file, `-g` or` --generate-config-file` will generate a config file template. 
 "#
     );
@@ -139,24 +138,49 @@ fn getenv() -> Option<String> {
     return Some(config_file);
 }
 
+struct Graphics {
+    imgbuf: ImageBuffer<Rgb<u8>, Vec<u8>>,
+}
+
+impl Graphics {
+    fn new(width: usize, height: usize) -> Self {
+        return Graphics {
+            imgbuf: ImageBuffer::new(width as u32, height as u32),
+        };
+    }
+
+    fn set_pixel(&mut self, x: i32, y: i32, rgb: [u8; 3]) {
+        let pixel = self
+            .imgbuf
+            .get_pixel_mut(x.try_into().unwrap(), y.try_into().unwrap());
+        *pixel = Rgb(rgb);
+    }
+
+    fn write(&self, fname: String) {
+        self.imgbuf.save(fname).unwrap();
+    }
+}
+
 fn image_write(config: &Config, t: u32, a: &Vec<Vec<f64>>, b: &Vec<Vec<f64>>, c: &Vec<Vec<f64>>) {
     // 各回の領域を画像(PNG)で出力するファイル名
     let fname = format!("{}{:04}.png", config.file_prefix, t);
-    // 画像のバッファーを確保
-    let mut imgbuf = image::ImageBuffer::new(a[0].len() as u32, a.len() as u32);
 
+    // 画像のバッファーを確保
+    let mut g = Graphics::new(a[0].len(), a.len());
     // 領域内の各セル（反応の最小単位領域）で各化学種の濃度を色にする
     // 各化学種とも大きさは同じなので代表でaのサイズでループを形成
     for x in 0..a.len() {
         for y in 0..a[x].len() {
-            let r: u8 = (a[x][y] * 256.0) as u8;
-            let g: u8 = (b[x][y] * 256.0) as u8;
-            let b: u8 = (c[x][y] * 256.0) as u8;
-            let pixel = imgbuf.get_pixel_mut(x.try_into().unwrap(), y.try_into().unwrap());
-            *pixel = image::Rgb([r, g, b]);
+            let rgb = [
+                (a[x][y] * 256.0) as u8,
+                (b[x][y] * 256.0) as u8,
+                (c[x][y] * 256.0) as u8,
+            ];
+
+            g.set_pixel(x.try_into().unwrap(), y.try_into().unwrap(), rgb);
         }
     }
-    imgbuf.save(fname).unwrap();
+    g.write(fname);
 }
 
 fn main() {
