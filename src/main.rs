@@ -141,29 +141,6 @@ fn getenv() -> Option<String> {
     return Some(config_file);
 }
 
-// struct Graphics {
-//     imgbuf: ImageBuffer<Rgb<u8>, Vec<u8>>,
-// }
-
-// impl Graphics {
-//     fn new(width: usize, height: usize) -> Self {
-//         return Graphics {
-//             imgbuf: ImageBuffer::new(width as u32, height as u32),
-//         };
-//     }
-
-//     fn set_pixel(&mut self, x: i32, y: i32, rgb: [u8; 3]) {
-//         let pixel = self
-//             .imgbuf
-//             .get_pixel_mut(x.try_into().unwrap(), y.try_into().unwrap());
-//         *pixel = Rgb(rgb);
-//     }
-
-//     fn write(&self, fname: String) {
-//         self.imgbuf.save(fname).unwrap();
-//     }
-// }
-
 fn image_write(config: &Config, t: u32, a: &Vec<Vec<f64>>, b: &Vec<Vec<f64>>, c: &Vec<Vec<f64>>) {
     // 各回の領域を画像(PNG)で出力するファイル名
     let fname = format!("{}{:04}.png", config.file_prefix, t);
