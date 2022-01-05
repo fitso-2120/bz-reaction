@@ -1,7 +1,17 @@
 # bz-reaction
 
 ## Usage
-Add this to you `Cargo.toml`:
+Download
+- fitso-lab/bz-reaction
+- fitso-lab/image-graphics<br/>
+  Homebrew image graphics library
+
+```bash
+git clone https://github.com/fitso-lab/bz-reaction.git
+git clone https://github.com/fitso-lab/image-graphics.git
+```
+Move to bz-reaction directory.<br/>
+Check this to you `Cargo.toml`:
 ```toml
 [dependencies]
 getopts = "0.2.21"
@@ -9,6 +19,9 @@ image = "0.23.14"
 rand = "0.8.4"
 serde = { version = "1.0.132", features = ["derive"] }
 toml = "0.5.8"
+
+[dependencies.image_graphics]
+path = "../image-graphics"
 ```
 
 Argument description...
