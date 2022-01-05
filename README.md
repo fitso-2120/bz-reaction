@@ -33,7 +33,7 @@ First, create a configuration file.<br/>
 Configuration file does not create automatically.
 
 ```bash
-cargo run --release -- -h
+cargo run --release -- -g
 ```
 
 Configuretion file is ...
