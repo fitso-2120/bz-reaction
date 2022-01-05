@@ -3,6 +3,8 @@ extern crate rand;
 extern crate serde;
 extern crate toml;
 
+extern crate image_graphics;
+
 use getopts::Options;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -10,9 +12,7 @@ use std::env;
 use std::fs::{self, File};
 use std::io::Write;
 
-pub mod image_graphics;
-
-use image_graphics::Graphics;
+use image_graphics::image_graphics::Graphics;
 
 // ベロウソフ・ジャボチンスキー(Belousov-Zhabotinsky, BZ)反応のシミュレーション
 // [Qiita BZ反応のシミュレーション](https://qiita.com/STInverSpinel/items/a7dcfbde0a08063f4d41)を参照
