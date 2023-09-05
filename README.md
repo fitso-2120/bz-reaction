@@ -7,12 +7,15 @@ Download
 ```bash
 git clone https://github.com/fitso-lab/bz-reaction.git
 ```
+
 Move to bz-reaction directory.<br/>
 Check this to you `Cargo.toml`:
+
 ```toml
 [dependencies]
 eframe = "*"
 rand = "*"
+```
 
 First, create a configuration file.<br/>
 Configuration file does not create automatically.
