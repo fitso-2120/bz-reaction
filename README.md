@@ -3,52 +3,23 @@
 ## Usage
 Download
 - fitso-lab/bz-reaction
-- fitso-lab/image-graphics<br/>
-  Homebrew image graphics library
 
 ```bash
 git clone https://github.com/fitso-lab/bz-reaction.git
-git clone https://github.com/fitso-lab/image-graphics.git
 ```
 Move to bz-reaction directory.<br/>
 Check this to you `Cargo.toml`:
 ```toml
 [dependencies]
-getopts = "0.2.21"
-image = "0.23.14"
-rand = "0.8.4"
-serde = { version = "1.0.132", features = ["derive"] }
-toml = "0.5.8"
-
-[dependencies.image_graphics]
-path = "../image-graphics"
-```
-
-Argument description...
-```bash
-cargo run --release -- -h
-```
+eframe = "*"
+rand = "*"
 
 First, create a configuration file.<br/>
 Configuration file does not create automatically.
 
 ```bash
-cargo run --release -- -g
+cargo run --release
 ```
-
-Configuretion file is ...
-```toml
-height = 400 # image area's height
-width = 400  # image area's width
-alpha = 0.8  # Chemical species `A`'s relative velocity of reaction.
-beta = 1.0   # Chemical species `B`'s relative velocity of reaction.
-gamma = 1.0  # Chemical species `C`'s relative velocity of reaction.
-times = 200  # The number of times to simulate. Number of image files.
-file_prefix = "images/file-" # Image file prefix
-```
-
-Image file is in png format.<br/>
-You can combine multiple PNG files into one APNG file using tools such as `APNG Assembler`.
 
 In Japanese
 
