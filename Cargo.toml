@@ -1,14 +1,9 @@
 [package]
 name = "bz-reaction"
-version = "0.2.0"
+version = "0.3.0"
+authors = ["fitso-2120"]
 edition = "2021"
 
 [dependencies]
-getopts = "0.2.21"
-image = "0.23.14"
-rand = "0.8.4"
-serde = { version = "1.0.132", features = ["derive"] }
-toml = "0.5.8"
-
-[dependencies.image_graphics]
-path = "../image-graphics"
+eframe = "*" # Gives us egui, epi and web+native backends
+rand = "*"

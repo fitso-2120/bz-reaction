@@ -1,222 +1,240 @@
-extern crate getopts;
-extern crate rand;
-extern crate serde;
-extern crate toml;
+use eframe::{egui, egui::ColorImage, emath::History};
+use egui::TextureHandle;
+// use image::{ImageBuffer, Rgba};
+use rand::{rngs::ThreadRng, Rng};
 
-use getopts::Options;
-use rand::Rng;
-use serde::{Deserialize, Serialize};
-use std::env;
-use std::fs::{self, File};
-use std::io::Write;
-
-// 自作ライブラリー
-extern crate image_graphics;
-use image_graphics::image_graphics::Graphics;
-
-// ベロウソフ・ジャボチンスキー(Belousov-Zhabotinsky, BZ)反応のシミュレーション
-// [Qiita BZ反応のシミュレーション](https://qiita.com/STInverSpinel/items/a7dcfbde0a08063f4d41)を参照
-// オリジナルはJuliaで書かれていたものをRustに変換
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Config {
-    // 領域の大きさ
-    height: usize,
-    width: usize,
-
-    // 反応の強度
-    alpha: f64,
-    beta: f64,
-    gamma: f64,
-
-    // 繰返回数
-    times: u32,
-
-    // イメージファイルのプリフィックス
-    file_prefix: String,
+/// release/debugモードの表示
+/// debugモードでは、警告表示
+/// releaseモードでは、パッケージ名とバージョンを表示する
+fn show_build_mode(ui: &mut egui::Ui) {
+    if cfg!(debug_assertions) {
+        ui.label(
+            egui::RichText::new("‼ Debug build ‼")
+                .small()
+                .color(egui::Color32::RED),
+        )
+        .on_hover_text("This module is created in debug mode");
+    } else {
+        ui.label(
+            egui::RichText::new(format!(
+                "‼ {} Ver.{} ‼",
+                env!("CARGO_PKG_NAME"),
+                env!("CARGO_PKG_VERSION")
+            ))
+            .small()
+            .color(egui::Color32::GREEN),
+        )
+        .on_hover_text("This mode is created in release mode.");
+    }
 }
 
-// 確認用に作成。普段は使用しない
-#[allow(dead_code)]
-fn sum(a: &Vec<Vec<f64>>) -> f64 {
-    let mut s = 0.0;
-    for i in 0..a.len() {
-        for j in 0..a[0].len() {
-            s += a[i as usize][j as usize].abs();
-        }
+// このままだと、"0.1"で、"."を消すと"1"になる。一桁では小数点を挿入できないなど、数値入力として不自然な動作になる。
+fn input_f32(ui: &mut egui::Ui, mut s: f32) -> f32 {
+    let mut w = s.to_string();
+    let res = ui.text_edit_singleline(&mut w);
+    if res.changed() {
+        s = if let Ok(x) = w.parse() { x } else { 0.0 };
     }
     return s;
 }
 
-// 配列は、スタック上に確保されるため大きな配列はスタックオーバーフローになる。
-// なので、Vecを使用しているが、固定サイズで使用するため、最初の確保のみここに集約する
-// 2次元の1次元目の大きさは、`a.len()`、2次元目は、`a[i].len()`のようにその添字での大きさでもよいが、
-// 大きさ固定なので、`a[0].len()`としておく
-fn mat_init(h: usize, w: usize) -> Vec<Vec<f64>> {
-    let mut a: Vec<Vec<f64>>;
-
-    a = Vec::new();
-    a.resize(h, Vec::new());
-    for i in 0..h {
-        a[i] = Vec::new();
-        a[i].resize(w, 0.0);
+fn input_usize(ui: &mut egui::Ui, mut s: usize) -> usize {
+    let mut w = s.to_string();
+    let res = ui.text_edit_singleline(&mut w);
+    if res.changed() {
+        s = if let Ok(x) = w.parse() { x } else { 0 };
     }
-
-    return a;
+    return s;
 }
 
-fn print_usage(pgname: &String, opt: Options) {
-    let brief = format!("Usage: {} FILE [options]", pgname);
-    print!("{}", opt.usage(&brief));
-    print!(
-        r#"\
-The configuration file has the same directory as this command, and the command name.toml is assumed.\n
-To change the configuration file to use, use `-c` or` --config-file`.\n
-If there is no config file, `-g` or` --generate-config-file` will generate a config file template. 
-"#
-    );
+// ジェネリックでまとめたいのだけれど、コンパイルが通らない・・・
+// fn input<T>(ui: &mut egui::Ui, mut s: T) -> T {
+//     let mut w = match  std::any::type_name::<T>() {
+//         f32 => s.to_string(),
+//         usize => s.to_string(),
+//     };
+//     let res = ui.text_edit_singleline(&mut w);
+//     if res.changed() {
+//         s = if let Ok(x) = w.parse() { x } else { 0 };
+//     }
+//     return s;
+// }
+
+fn popup_window(ctx: &egui::Context, s: &mut BzReactionApp) -> bool {
+    let mut ret = true;
+    egui::Window::new("Settings Window").show(ctx, |ui| {
+        ui.heading("BZ-Reaction Settings");
+        ui.horizontal(|ui| {
+            ui.label("Width: ");
+            s.width = input_usize(ui, s.width);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Height: ");
+            s.height = input_usize(ui, s.height);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Alpha: ");
+            s.alpha = input_f32(ui, s.alpha);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Beta: ");
+            s.beta = input_f32(ui, s.beta);
+        });
+        ui.horizontal(|ui| {
+            ui.label("Gamma: ");
+            s.gamma = input_f32(ui, s.gamma);
+        });
+
+        ui.separator();
+
+        ui.horizontal(|ui| {
+            if ui.button("Save").clicked() {
+                // 内容を保存してウィンドウを閉じる
+                ret = false;
+            }
+            if ui.button("Cancel").clicked() {
+                // 何もせずウィンドウを閉じる
+                ret = false;
+            }
+        });
+    });
+    return ret;
 }
 
-fn getenv() -> Option<String> {
-    let args: Vec<String> = env::args().collect();
-    let pgname = args[0].clone();
+/// アプリケーションで使用するメンバー変数を定義する。
+pub struct BzReactionApp {
+    width: usize,
+    height: usize,
+    times: u32,
+    update_cycle: u32,
+    alpha: f32,
+    beta: f32,
+    gamma: f32,
+    a: Vec<Vec<f32>>,
+    b: Vec<Vec<f32>>,
+    c: Vec<Vec<f32>>,
+    tmp_a: Vec<Vec<f32>>,
+    tmp_b: Vec<Vec<f32>>,
+    tmp_c: Vec<Vec<f32>>,
 
-    let mut opts = Options::new();
-    opts.optopt("c", "config-file", "change configuration-file", "NAME");
-    opts.optflag(
-        "g",
-        "generate-config-file",
-        "create template of settings-file",
-    );
-    opts.optflag("h", "help", "print this help menu");
+    popup_dialog: bool,
+    is_running: bool,
+    texture: Option<TextureHandle>,
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            panic!("{}", f.to_string())
+    rng: ThreadRng,
+
+    frame_times: History<f32>,
+}
+
+/// アプリケーションで使用するメソッドを定義する
+impl Default for BzReactionApp {
+    fn default() -> Self {
+        let max_age: f32 = 1.0;
+        let max_len = (max_age * 300.0).round() as usize;
+
+        Self {
+            width: 0,
+            height: 0,
+            times: 0,
+            update_cycle: 1,
+            alpha: 0.0,
+            beta: 0.0,
+            gamma: 0.0,
+            a: Vec::new(),
+            b: Vec::new(),
+            c: Vec::new(),
+            tmp_a: Vec::new(),
+            tmp_b: Vec::new(),
+            tmp_c: Vec::new(),
+            popup_dialog: false,
+            is_running: false,
+            texture: None,
+            rng: rand::thread_rng(),
+
+            frame_times: History::new(0..max_len, max_age),
         }
-    };
-
-    if matches.opt_present("h") {
-        print_usage(&pgname, opts);
-        return None;
     }
-
-    // 設定ファイル名を確定
-    let config_file_opt = matches.opt_str("c");
-    // 拡張子に".toml"を無条件に追加
-    let config_file = if config_file_opt == None {
-        pgname
-    } else {
-        config_file_opt.unwrap()
-    } + ".toml";
-
-    // 設定ファイル書き出しか？
-    if matches.opt_present("g") {
-        // 設定ファイルを確定したファイル名で出力
-        let config = Config {
-            height: 400,
-            width: 400,
-            alpha: 0.8,
-            beta: 1.0,
-            gamma: 1.0,
-            times: 200,
-            file_prefix: "images/file-".to_string(),
-        };
-        let mut file = match File::create(config_file) {
-            Ok(it) => it,
-            Err(err) => panic!("{}", err),
-        };
-        match write!(file, "{}", toml::to_string(&config).unwrap()) {
-            Ok(it) => it,
-            Err(err) => panic!("{}", err),
-        };
-        match file.flush() {
-            Ok(it) => it,
-            Err(err) => panic!("{}", err),
-        }
-        return None;
-    }
-
-    return Some(config_file);
 }
 
-fn image_write(config: &Config, t: u32, a: &Vec<Vec<f64>>, b: &Vec<Vec<f64>>, c: &Vec<Vec<f64>>) {
-    // 各回の領域を画像(PNG)で出力するファイル名
-    let fname = format!("{}{:04}.png", config.file_prefix, t);
+impl BzReactionApp {
+    fn new(_: &eframe::CreationContext<'_>) -> Self {
+        let mut w = Self::default();
+        w.width = 400;
+        w.height = 400;
 
-    // 画像のバッファーを確保
-    let mut g = Graphics::new(a[0].len(), a.len());
-    // 領域内の各セル（反応の最小単位領域）で各化学種の濃度を色にする
-    // 各化学種とも大きさは同じなので代表でaのサイズでループを形成
-    for x in 0..a.len() {
-        for y in 0..a[x].len() {
-            let rgb = [
-                (a[x][y] * 256.0) as u8,
-                (b[x][y] * 256.0) as u8,
-                (c[x][y] * 256.0) as u8,
-            ];
+        // w.update_cycle = 10;
+        w.alpha = 0.8;
+        w.beta = 1.0;
+        w.gamma = 1.0;
+        w.mat_init(w.width, w.height);
 
-            g.set_pixel(x.try_into().unwrap(), y.try_into().unwrap(), rgb);
+        return w;
+    }
+
+    pub fn on_new_frame(&mut self, now: f64, previous_frame_time: Option<f32>) {
+        let previous_frame_time = previous_frame_time.unwrap_or_default();
+        if let Some(latest) = self.frame_times.latest_mut() {
+            *latest = previous_frame_time; // rewrite history now that we know
         }
+        self.frame_times.add(now, previous_frame_time); // projected
     }
-    g.write(fname);
-}
-
-fn main() {
-    let config_file_opt = getenv();
-    if config_file_opt == None {
-        return;
+    pub fn fps(&self) -> f32 {
+        1.0 / self.frame_times.mean_time_interval().unwrap_or_default()
     }
-    let config_file = config_file_opt.unwrap();
-    // Read file and parse to Setting
-    if !std::path::Path::new(&config_file).exists() {
-        print!("config-file '{}' is not found\nIf this is the first execution, execute it with `-g` to create a configuration file.", config_file);
-        return;
-    };
-    let config_str: String = match fs::read_to_string(config_file) {
-        Ok(it) => it,
-        Err(err) => panic!("{}", err),
-    };
-    let config: Config = toml::from_str(&config_str).unwrap();
 
-    // 領域に３つの化学種を用意
-    let mut a = mat_init(config.height, config.width);
-    let mut b = mat_init(config.height, config.width);
-    let mut c = mat_init(config.height, config.width);
+    pub fn mat_init(&mut self, w: usize, h: usize) {
+        fn init(w: usize, h: usize) -> Vec<Vec<f32>> {
+            let mut a: Vec<Vec<f32>>;
 
-    // 各々の化学種の濃度を[0..1]の範囲で乱数で配置
-    rand_area(&mut a);
-    rand_area(&mut b);
-    rand_area(&mut c);
+            a = Vec::new();
+            a.resize(h, Vec::new());
+            for i in 0..h {
+                a[i] = Vec::new();
+                a[i].resize(w, 0.0);
+            }
 
-    // 必要回数反応を繰り返す
-    for t in 0..config.times {
-        image_write(&config, t, &a, &b, &c);
+            return a;
+        }
+
+        self.a = init(w, h);
+        self.b = init(w, h);
+        self.c = init(w, h);
+        self.tmp_a = init(w, h);
+        self.tmp_b = init(w, h);
+        self.tmp_c = init(w, h);
+    }
+
+    pub fn calc(&mut self) {
+        // 隣接するセルの計算する際、領域の端を超える場合は、反対側を示す。
+        // 領域がトーラスとなり、端がない状態になる
+        pub fn bound(x: usize, min: usize, max: usize) -> [usize; 3] {
+            let xm1 = if x <= min { max - 1 } else { x - 1 };
+            let xp1 = if x >= max - 1 { min } else { x + 1 };
+
+            return [xm1, x, xp1];
+        }
 
         // 反応は同期的に行うため、今の濃度を保存する
-        let tempa = copy(&a);
-        let tempb = copy(&b);
-        let tempc = copy(&c);
+        self.copy();
 
         //print!("step {:04}, sum(a) = {:.1}, sum(b)= {:.1}, sum(c) = {:.1}\n", t, sum(&a), sum(&b), sum(&c));
 
         // 領域の各セルについて次の世代への濃度の計算を行う
-        for x in 0..a.len() {
-            for y in 0..a[x].len() {
+        for x in 0..self.a.len() {
+            for y in 0..self.a[x].len() {
                 let mut ca = 0.0;
                 let mut cb = 0.0;
                 let mut cc = 0.0;
 
                 // 近傍の座標を補正
-                let i = bound(x, 0, a.len());
-                let j = bound(y, 0, a[0].len());
+                let i = bound(x, 0, self.a.len());
+                let j = bound(y, 0, self.a[0].len());
                 // 自身と隣接するセルの計9つのセルで濃度を集計
                 for ii in i {
                     for jj in j {
-                        ca += tempa[ii][jj];
-                        cb += tempb[ii][jj];
-                        cc += tempc[ii][jj];
+                        ca += self.tmp_a[ii][jj];
+                        cb += self.tmp_b[ii][jj];
+                        cc += self.tmp_c[ii][jj];
                     }
                 }
 
@@ -227,67 +245,180 @@ fn main() {
                 //print!("step {:04}, ({:03},{:03}) ca) = {:.1}, cb = {:.1}, cc = {:.1}\n", t, x, y, ca, cb, cc);
 
                 // 次の世代での濃度を計算
-                a[x as usize][y as usize] = ca * (1.0 + (config.alpha * cb - config.gamma * cc));
-                b[x as usize][y as usize] = cb * (1.0 + (config.beta * cc - config.alpha * ca));
-                c[x as usize][y as usize] = cc * (1.0 + (config.gamma * ca - config.beta * cb));
+                self.a[x][y] = ca * (1.0 + (self.alpha * cb - self.gamma * cc));
+                self.b[x][y] = cb * (1.0 + (self.beta * cc - self.alpha * ca));
+                self.c[x][y] = cc * (1.0 + (self.gamma * ca - self.beta * cb));
             }
         }
 
         // 領域全体の計算後、各セルで濃度が[0..1]に収まるように調整
-        clamp(&mut a);
-        clamp(&mut b);
-        clamp(&mut c);
+        self.clamp();
+
+        // println!("{:.3},{:.3},{:.3}", self.a[0][0], self.b[0][0], self.c[0][0]);
     }
-}
 
-// 隣接するセルの計算する際、領域の端を超える場合は、反対側を示す。
-// 領域がトーラスとなり、端がない状態になる
-fn bound(x: usize, min: usize, max: usize) -> [usize; 3] {
-    let xm1 = if x <= min { max - 1 } else { x - 1 };
-    let xp1 = if x >= max - 1 { min } else { x + 1 };
-
-    return [xm1, x, xp1];
-}
-
-fn copy(a: &Vec<Vec<f64>>) -> Vec<Vec<f64>> {
-    let mut tempa: Vec<Vec<f64>>;
-
-    tempa = Vec::new();
-    tempa.resize(a.len(), Vec::new());
-    for i in 0..a.len() {
-        tempa[i] = Vec::new();
-        tempa[i].resize(a[0].len(), 0.0);
-        for j in 0..a[i].len() {
-            tempa[i][j] = a[i][j];
+    fn copy(&mut self) {
+        for i in 0..self.a.len() {
+            for j in 0..self.a[i].len() {
+                self.tmp_a[i][j] = self.a[i][j];
+                self.tmp_b[i][j] = self.b[i][j];
+                self.tmp_c[i][j] = self.c[i][j];
+            }
         }
     }
-    return tempa;
+
+    pub fn clamp(&mut self) {
+        pub fn constrain(d: f32) -> f32 {
+            if d < 0.0 {
+                return 0.0;
+            } else if d > 1.0 {
+                return 1.0;
+            }
+
+            return d;
+        }
+
+        for i in 0..self.a.len() {
+            for j in 0..self.a[0].len() {
+                self.a[i][j] = constrain(self.a[i][j]);
+                self.b[i][j] = constrain(self.b[i][j]);
+                self.c[i][j] = constrain(self.c[i][j]);
+            }
+        }
+    }
+
+    pub fn rand_area(&mut self) {
+        for i in 0..self.a.len() {
+            for j in 0..self.a[0].len() {
+                self.a[i][j] = self.rng.gen();
+                self.b[i][j] = self.rng.gen();
+                self.c[i][j] = self.rng.gen();
+            }
+        }
+    }
+
+    pub fn paint_area(&self) -> ColorImage {
+        // 画像のバッファーを確保。eguiのimageとの関連で、カラーはRGBAした。
+        // 領域内の各セル（反応の最小単位領域）で各化学種の濃度を色にする
+        // 各化学種とも大きさは同じなので代表でaのサイズでループを形成
+        let mut pixels = Vec::new();
+
+        for iy in 0..self.height {
+            for ix in 0..self.width {
+                pixels.push((self.a[ix][iy] * 256.0) as u8);
+                pixels.push((self.b[ix][iy] * 256.0) as u8);
+                pixels.push((self.c[ix][iy] * 256.0) as u8);
+            }
+        }
+
+        let imgbuf = ColorImage::from_rgb([self.width, self.height], pixels.as_slice());
+        return imgbuf;
+    }
 }
 
-fn clamp(a: &mut Vec<Vec<f64>>) {
-    for i in 0..a.len() {
-        for j in 0..a[0].len() {
-            a[i][j] = constrain(a[i][j]);
+/// EGUIのアプリケーション用拡張を定義する。
+/// name()が名前（タイトル名）取得用、update()が画面更新用に必要。残りはデフォルトに任せる
+impl eframe::App for BzReactionApp {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
+
+        /*
+        上にメニューバーとビルド情報 Debug/Release
+        項目は、Settings,Reset,Start,Pause,Stop,Quit
+        下にステータスバー。表示項目はSettingsの内容
+
+         */
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                egui::menu::bar(ui, |ui| {
+                    ui.menu_button("File", |ui| {
+                        if ui.button("Quit").clicked() {
+                            frame.close();
+                        }
+                    });
+                    if ui.button("🔧 Settings").clicked() {
+                        self.popup_dialog = true;
+                    }
+                    if self.popup_dialog {
+                        self.popup_dialog = popup_window(ctx, self);
+                    };
+                    if self.is_running {
+                        if ui.button("Stop").clicked() {
+                            self.is_running = false;
+                        }
+                    } else {
+                        if ui.button("Run").clicked() {
+                            self.is_running = true;
+                            if self.times == 0 {
+                                self.mat_init(self.width, self.height);
+                                self.rand_area();
+                            }
+                        }
+                        if ui.button("Reset").clicked() {
+                            self.times = 0;
+                            self.rand_area();
+                        }
+                    }
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    show_build_mode(ui);
+                });
+            });
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            if self.is_running {
+                self.times += 1;
+                if self.times % self.update_cycle == 0 {
+                    self.calc();
+                }
+                let image_buffer = self.paint_area();
+
+                let texture =
+                    ui.ctx()
+                        .load_texture("BZ-Reaction-image", image_buffer, Default::default());
+
+                self.texture = Some(texture.clone());
+            }
+
+            if self.texture != None {
+                if let Some(texture) = &self.texture {
+                    ui.image(texture, texture.size_vec2());
+                }
+            }
+        });
+
+        egui::TopBottomPanel::bottom("status_panel").show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(format!("({}, {}) ", self.width, self.height));
+                ui.label(format!("times={}", self.times));
+                ui.label(format!("({}, {}, {})", self.alpha, self.beta, self.gamma));
+
+                if self.is_running {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                        ui.label(format!("FPS {:.1}", self.fps()));
+                        ui.separator();
+                    });
+                }
+            });
+        });
+
+        if self.is_running {
+            ctx.request_repaint();
         }
     }
 }
 
-fn rand_area(a: &mut Vec<Vec<f64>>) {
-    let mut rng = rand::thread_rng();
+fn main() -> eframe::Result<()> {
+    let options = eframe::NativeOptions {
+        follow_system_theme: false,
 
-    for i in 0..a.len() {
-        for j in 0..a[0].len() {
-            a[i][j] = rng.gen();
-        }
-    }
-}
+        ..Default::default()
+    };
 
-fn constrain(d: f64) -> f64 {
-    if d < 0.0 {
-        return 0.0;
-    } else if d > 1.0 {
-        return 1.0;
-    }
-
-    return d;
+    eframe::run_native(
+        "BZ-Reaction",
+        options,
+        Box::new(|cc| Box::new(BzReactionApp::new(cc))),
+    )
 }
